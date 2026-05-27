@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Skaner Palet</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@700;800&display=swap');
+
+  :root {
+    --bg: #0d0f14; --surface: #161a23; --card: #1d2230; --border: #2a3147;
+    --accent: #00e5ff; --pass: #00e676; --untested: #ffb300; --conc: #ff5252;
+    --text: #e8eaf0; --muted: #6b7a99;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: "JetBrains Mono", monospace; min-height: 100vh; padding-bottom: 80px; }
+
+  header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; }
+  header h1 { font-family: "Syne", sans-serif; font-size: 1rem; font-weight: 800; color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; }
+  header p { font-size: 0.58rem; color: var(--muted); margin-top: 2px; }
+
+  .db-bar { padding: 8px 12px; font-size: 0.62rem; display: flex; justify-content: space-between; align-items: center; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .db-status { display: flex; align-items: center; gap: 6px; }
+  .db-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .db-dot.loaded { background: var(--pass); box-shadow: 0 0 6px var(--pass); }
+  .db-dot.loading { background: var(--untested); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .db-text { color: var(--muted); }
+  .db-text.loaded { color: var(--text); }
+  .upload-btn-small { background: var(--card); border: 1px solid var(--accent); color: var(--accent); padding: 4px 10px; border-radius: 5px; font-family: "JetBrains Mono", monospace; font-size: 0.6rem; font-weight: 700; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+
+  .upload-panel { margin: 12px; background: var(--surface); border: 2px dashed var(--border); border-radius: 12px; padding: 24px 16px; text-align: center; transition: border-color 0.2s; }
+  .upload-panel.dragover { border-color: var(--accent); background: rgba(0,229,255,0.04); }
+  .upload-panel h2 { font-family: "Syne", sans-serif; font-size: 0.9rem; color: var(--text); margin-bottom: 6px; }
+  .upload-panel p { font-size: 0.62rem; color: var(--muted); margin-bottom: 16px; line-height: 1.6; }
+  .upload-panel .icon { font-size: 2.5rem; display: block; margin-bottom: 10px; }
+  .upload-file-btn { background: var(--accent); color: #000; border: none; padding: 11px 24px; border-radius: 8px; font-family: "JetBrains Mono", monospace; font-size: 0.75rem; font-weight: 700; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em; display: inline-block; }
+  #fileInput { display: none; }
+  .col-hint { margin-top: 14px; font-size: 0.58rem; color: var(--muted); line-height: 1.8; text-align: left; background: var(--card); border-radius: 6px; padding: 10px 12px; }
+  .col-hint strong { color: var(--accent); }
+
+  /* SCAN SECTION */
+  .scan-box { margin: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .scan-box label { font-size: 0.62rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 8px; }
+  .scan-row { display: flex; gap: 8px; }
+
+  #batchInput {
+    flex: 1; background: var(--card); border: 2px solid var(--accent); color: var(--text);
+    padding: 10px 14px; border-radius: 8px; font-family: "JetBrains Mono", monospace;
+    font-size: 0.85rem; font-weight: 600; outline: none; letter-spacing: 0.04em;
+  }
+  #batchInput::placeholder { color: var(--muted); font-weight: 400; }
+
+  /* QR SCAN BUTTON */
+  #qrBtn {
+    background: var(--surface);
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    width: 46px;
+    height: 46px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 1.3rem;
+  }
+  #qrBtn:active { background: rgba(0,229,255,0.15); transform: scale(0.95); }
+
+  #addBtn {
+    background: var(--accent); color: #000; border: none; padding: 10px 14px;
+    border-radius: 8px; font-family: "JetBrains Mono", monospace; font-size: 0.75rem;
+    font-weight: 700; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;
+  }
+  #addBtn:active { opacity: 0.8; transform: scale(0.97); }
+
+  #feedback { margin-top: 10px; font-size: 0.68rem; min-height: 20px; border-radius: 6px; padding: 7px 10px; display: none; }
+  #feedback.ok { display: block; background: rgba(0,230,118,0.12); color: var(--pass); border: 1px solid rgba(0,230,118,0.3); }
+  #feedback.err { display: block; background: rgba(255,82,82,0.12); color: var(--conc); border: 1px solid rgba(255,82,82,0.3); }
+
+  /* QR SCANNER OVERLAY */
+  #scannerOverlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 1000;
+    flex-direction: column;
+  }
+  #scannerOverlay.open { display: flex; }
+
+  .scanner-header {
+    background: rgba(0,0,0,0.85);
+    padding: 14px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #333;
+  }
+  .scanner-header span { font-family: "Syne", sans-serif; font-size: 0.9rem; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; }
+
+  #closeScanner {
+    background: none; border: 1px solid #444; color: #aaa;
+    padding: 6px 14px; border-radius: 6px; font-family: "JetBrains Mono", monospace;
+    font-size: 0.7rem; cursor: pointer; text-transform: uppercase;
+  }
+
+  #videoEl { width: 100%; flex: 1; object-fit: cover; }
+
+  .scan-frame {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 220px; height: 220px;
+    border: 2px solid var(--accent);
+    border-radius: 12px;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.55);
+    pointer-events: none;
+  }
+
+  .scan-corners::before, .scan-corners::after,
+  .scan-corners span::before, .scan-corners span::after {
+    content: ''; position: absolute; width: 24px; height: 24px; border-color: var(--accent); border-style: solid;
+  }
+  .scan-corners::before { top: -2px; left: -2px; border-width: 3px 0 0 3px; border-radius: 10px 0 0 0; }
+  .scan-corners::after  { top: -2px; right: -2px; border-width: 3px 3px 0 0; border-radius: 0 10px 0 0; }
+  .scan-corners span::before { bottom: -2px; left: -2px; border-width: 0 0 3px 3px; border-radius: 0 0 0 10px; }
+  .scan-corners span::after  { bottom: -2px; right: -2px; border-width: 0 3px 3px 0; border-radius: 0 0 10px 0; }
+
+  .scan-line {
+    position: absolute; left: 10px; right: 10px; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: scanAnim 2s linear infinite;
+    top: 20px;
+  }
+  @keyframes scanAnim { 0%{top:10px} 100%{top:200px} }
+
+  .scanner-hint { position: absolute; bottom: 100px; left: 0; right: 0; text-align: center; color: #ccc; font-size: 0.7rem; pointer-events: none; }
+
+  .scanner-result {
+    background: rgba(0,0,0,0.9);
+    padding: 12px 16px;
+    border-top: 1px solid #333;
+    font-size: 0.7rem;
+    color: var(--muted);
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .scanner-result.found { color: var(--pass); }
+  .scanner-result.notfound { color: var(--conc); }
+
+  /* LIST */
+  .counter-bar { display: flex; justify-content: space-between; align-items: center; margin: 0 12px 8px; }
+  .counter-bar span { font-size: 0.62rem; color: var(--muted); }
+  .counter-bar strong { color: var(--accent); font-size: 0.85rem; }
+
+  .scanned-list { margin: 0 12px; display: flex; flex-direction: column; gap: 6px; }
+  .s-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; animation: slideIn 0.2s ease; }
+  @keyframes slideIn { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
+  .s-card.status-PASS { border-left: 3px solid var(--pass); }
+  .s-card.status-UNTESTED { border-left: 3px solid var(--untested); }
+  .s-card.status-CONC { border-left: 3px solid var(--conc); }
+  .s-main { flex: 1; min-width: 0; }
+  .s-item { font-size: 0.65rem; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .s-batch { font-size: 0.6rem; color: var(--accent); margin-top: 2px; }
+  .s-meta { display: flex; gap: 8px; margin-top: 4px; font-size: 0.6rem; flex-wrap: wrap; align-items: center; }
+  .s-loc { background: rgba(255,255,255,0.05); border: 1px solid var(--border); padding: 1px 6px; border-radius: 3px; color: var(--muted); }
+  .s-qty { color: var(--text); font-weight: 600; }
+  .s-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .s-badge { font-size: 0.55rem; font-weight: 700; padding: 2px 7px; border-radius: 4px; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
+  .badge-PASS { background: rgba(0,230,118,0.15); color: var(--pass); border: 1px solid rgba(0,230,118,0.3); }
+  .badge-UNTESTED { background: rgba(255,179,0,0.15); color: var(--untested); border: 1px solid rgba(255,179,0,0.3); }
+  .badge-CONC { background: rgba(255,82,82,0.15); color: var(--conc); border: 1px solid rgba(255,82,82,0.3); }
+  .badge-NA { background: rgba(107,122,153,0.15); color: var(--muted); border: 1px solid var(--border); }
+  .del-btn { background: none; border: 1px solid var(--border); color: var(--muted); width: 24px; height: 24px; border-radius: 4px; cursor: pointer; font-size: 0.75rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .del-btn:active { background: rgba(255,82,82,0.15); color: var(--conc); border-color: var(--conc); }
+  .seq-num { font-size: 0.55rem; color: var(--muted); margin-top: 2px; }
+  .empty-state { text-align: center; padding: 30px 16px; color: var(--muted); font-size: 0.7rem; line-height: 1.8; }
+  .empty-state .big { font-size: 2.2rem; display: block; margin-bottom: 8px; }
+
+  .export-bar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 2px solid var(--border); padding: 10px 12px; display: flex; gap: 8px; }
+  #exportBtn { flex: 1; background: var(--pass); color: #000; border: none; padding: 12px; border-radius: 8px; font-family: "JetBrains Mono", monospace; font-size: 0.75rem; font-weight: 700; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em; }
+  #exportBtn:disabled { opacity: 0.3; cursor: not-allowed; }
+  #exportBtn:not(:disabled):active { opacity: 0.8; }
+  #clearBtn { background: var(--card); border: 1px solid var(--border); color: var(--muted); padding: 12px 14px; border-radius: 8px; font-family: "JetBrains Mono", monospace; font-size: 0.7rem; cursor: pointer; text-transform: uppercase; }
+  #clearBtn:active { border-color: var(--conc); color: var(--conc); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>📱 Skaner Palet</h1>
+    <p>Wgraj xlsx → skanuj QR → eksportuj</p>
+  </div>
+</header>
+
+<div class="db-bar">
+  <div class="db-status">
+    <div class="db-dot" id="dbDot"></div>
+    <span class="db-text" id="dbText">Brak danych – wgraj plik xlsx</span>
+  </div>
+  <button class="upload-btn-small" onclick="document.getElementById('fileInput').click()">↑ Wgraj xlsx</button>
+</div>
+
+<input type="file" id="fileInput" accept=".xlsx,.xls" onchange="handleFile(this)">
+
+<div class="upload-panel" id="uploadPanel"
+  ondragover="event.preventDefault();this.classList.add('dragover')"
+  ondragleave="this.classList.remove('dragover')"
+  ondrop="handleDrop(event)">
+  <span class="icon">📂</span>
+  <h2>Wgraj Stan Magazynowy</h2>
+  <p>Wgraj codzienny eksport xlsx.<br>Aplikacja automatycznie rozpozna kolumny.</p>
+  <label class="upload-file-btn" for="fileInput">Wybierz plik xlsx</label>
+  <div class="col-hint">
+    <strong>Wymagane kolumny:</strong><br>
+    • <strong>Batch number</strong> – numer batcha<br>
+    • <strong>Item number</strong> – kod produktu<br>
+    • <strong>Location</strong> – lokalizacja<br>
+    • <strong>Batch disposition code</strong> – status<br>
+    • <strong>Physical stock</strong> – ilość
+  </div>
+</div>
+
+<div id="scanSection" style="display:none">
+  <div class="scan-box">
+    <label>🔍 Batch Number</label>
+    <div class="scan-row">
+      <input type="text" id="batchInput" placeholder="Wklej lub zeskanuj QR…" autocomplete="off" autocorrect="off" spellcheck="false">
+      <button id="qrBtn" onclick="openScanner()" title="Skanuj QR kamerą">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>
+          <rect x="14" y="14" width="3" height="3"/><rect x="18" y="14" width="3" height="3"/><rect x="14" y="18" width="3" height="3"/><rect x="18" y="18" width="3" height="3"/>
+        </svg>
+      </button>
+      <button id="addBtn" onclick="addBatch()">+ Dodaj</button>
+    </div>
+    <div id="feedback"></div>
+  </div>
+
+  <div class="counter-bar">
+    <span>Zeskanowane: <strong id="countNum">0</strong></span>
+    <span id="dateNow"></span>
+  </div>
+
+  <div class="scanned-list" id="scannedList">
+    <div class="empty-state"><span class="big">📦</span>Naciśnij 📷 aby zeskanować QR<br>lub wklej batch number ręcznie</div>
+  </div>
+</div>
+
+<!-- QR SCANNER OVERLAY -->
+<div id="scannerOverlay">
+  <div class="scanner-header">
+    <span>📷 Skanuję QR…</span>
+    <button id="closeScanner" onclick="closeScanner()">✕ Zamknij</button>
+  </div>
+  <div style="position:relative;flex:1;overflow:hidden;">
+    <video id="videoEl" autoplay playsinline muted></video>
+    <div class="scan-frame">
+      <div class="scan-corners"><span></span></div>
+      <div class="scan-line"></div>
+    </div>
+    <div class="scanner-hint">Nakieruj kamerę na kod QR z etykiety</div>
+  </div>
+  <div class="scanner-result" id="scannerResult">Czekam na kod QR…</div>
+</div>
+
+<div class="export-bar">
+  <button id="clearBtn" onclick="clearAll()">🗑 Wyczyść</button>
+  <button id="exportBtn" onclick="exportExcel()" disabled>⬇ Eksport Excel</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script>
+let LOOKUP = {};
+let scanned = [];
+let scannerStream = null;
+let scannerRAF = null;
+let lastScanned = '';
+let lastScannedTime = 0;
+
+const COL_ALIASES = {
+  batch:    ['batch number','batch no','batchnumber','batch_number','batch nr','nr batcha','numer batcha','lot number','lot no'],
+  item:     ['item number','item no','itemnumber','item_number','nr artykułu','nr artykulu','item','product id','article number'],
+  location: ['location','lokalizacja','loc','warehouse location','bin'],
+  status:   ['batch disposition code','batch disposition code2','disposition code','status','batch status','disposition'],
+  qty:      ['physical stock','physical stock2','qty','quantity','ilość','ilosc','stock'],
+  unit:     ['stock unit','unit','jednostka','uom']
+};
+
+function findCol(headers, field) {
+  for (const h of headers) {
+    if (COL_ALIASES[field].includes(h.toLowerCase().trim())) return h;
+  }
+  return null;
+}
+
+function normalize(s) {
+  return String(s||'').trim().toLowerCase().replace(/\s+/g,'').replace(/[–—]/g,'-');
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('uploadPanel').classList.remove('dragover');
+  if (e.dataTransfer.files[0]) loadXlsx(e.dataTransfer.files[0]);
+}
+
+function handleFile(input) {
+  if (input.files[0]) loadXlsx(input.files[0]);
+  input.value = '';
+}
+
+function loadXlsx(file) {
+  setDbStatus('loading','⏳ Wczytuję plik…');
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      if (!rows.length) { setDbStatus('err','❌ Plik jest pusty'); return; }
+      const headers = Object.keys(rows[0]);
+      const batchCol  = findCol(headers,'batch');
+      const itemCol   = findCol(headers,'item');
+      const locCol    = findCol(headers,'location');
+      const statusCol = findCol(headers,'status');
+      const qtyCol    = findCol(headers,'qty');
+      const unitCol   = findCol(headers,'unit');
+      if (!batchCol) { setDbStatus('err','❌ Brak kolumny "Batch number"'); return; }
+      if (!itemCol)  { setDbStatus('err','❌ Brak kolumny "Item number"'); return; }
+      LOOKUP = {};
+      let count = 0;
+      rows.forEach(r => {
+        const bv = String(r[batchCol]||'').trim();
+        if (!bv) return;
+        LOOKUP[normalize(bv)] = {
+          batch: bv,
+          item:     String(r[itemCol]||'').trim(),
+          location: locCol    ? String(r[locCol]||'').trim()    : '—',
+          status:   statusCol ? String(r[statusCol]||'').trim() : '—',
+          qty:      qtyCol    ? parseFloat(r[qtyCol])||0        : 0,
+          unit:     unitCol   ? String(r[unitCol]||'').trim()   : ''
+        };
+        count++;
+      });
+      setDbStatus('loaded', '✅ ' + count + ' pozycji · ' + file.name);
+      document.getElementById('uploadPanel').style.display = 'none';
+      document.getElementById('scanSection').style.display = 'block';
+      document.getElementById('batchInput').focus();
+    } catch(err) { setDbStatus('err','❌ Błąd: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function setDbStatus(state, msg) {
+  const dot  = document.getElementById('dbDot');
+  const text = document.getElementById('dbText');
+  dot.className  = 'db-dot' + (state==='loaded' ? ' loaded' : state==='loading' ? ' loading' : '');
+  text.className = 'db-text' + (state==='loaded' ? ' loaded' : '');
+  text.textContent = msg;
+}
+
+// ── QR SCANNER ──────────────────────────────────────────
+function openScanner() {
+  const overlay = document.getElementById('scannerOverlay');
+  overlay.classList.add('open');
+  document.getElementById('scannerResult').textContent = 'Czekam na kod QR…';
+  document.getElementById('scannerResult').className = 'scanner-result';
+
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'environment', width: {ideal:1280}, height: {ideal:720} }
+  }).then(stream => {
+    scannerStream = stream;
+    const video = document.getElementById('videoEl');
+    video.srcObject = stream;
+    video.play();
+    video.onloadedmetadata = () => { scanFrame(); };
+  }).catch(err => {
+    document.getElementById('scannerResult').textContent = '❌ Brak dostępu do kamery: ' + err.message;
+    document.getElementById('scannerResult').className = 'scanner-result notfound';
+  });
+}
+
+function closeScanner() {
+  document.getElementById('scannerOverlay').classList.remove('open');
+  if (scannerRAF) { cancelAnimationFrame(scannerRAF); scannerRAF = null; }
+  if (scannerStream) { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; }
+}
+
+function scanFrame() {
+  const video = document.getElementById('videoEl');
+  if (video.readyState !== video.HAVE_ENOUGH_DATA) { scannerRAF = requestAnimationFrame(scanFrame); return; }
+
+  const canvas = document.createElement('canvas');
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const code = jsQR(imageData.data, imageData.width, imageData.height, {inversionAttempts:'dontInvert'});
+
+  if (code && code.data) {
+    const raw = code.data.trim();
+    const now = Date.now();
+    // Deduplicate – don't re-scan same code within 3s
+    if (raw !== lastScanned || now - lastScannedTime > 3000) {
+      lastScanned = raw;
+      lastScannedTime = now;
+      handleQRResult(raw);
+    }
+  }
+
+  scannerRAF = requestAnimationFrame(scanFrame);
+}
+
+function handleQRResult(raw) {
+  // Try to extract batch number from QR content
+  // Supports: plain batch number, or key:value formats
+  let batchCandidate = raw;
+
+  // If contains pipe-separated key:value (our own QR format)
+  if (raw.includes('BATCH:')) {
+    const m = raw.match(/BATCH:([^|\n]+)/i);
+    if (m) batchCandidate = m[1].trim();
+  }
+  // If contains "Batch" label
+  else if (raw.match(/batch[^:]*:/i)) {
+    const m = raw.match(/batch[^:]*:\s*([^\n,;|]+)/i);
+    if (m) batchCandidate = m[1].trim();
+  }
+  // Otherwise use raw value as-is (Zotefoams QR = plain batch number)
+
+  const key = normalize(batchCandidate);
+  const record = LOOKUP[key];
+  const resultEl = document.getElementById('scannerResult');
+
+  if (record) {
+    const dup = scanned.find(s => normalize(s.batch) === key);
+    if (dup) {
+      resultEl.textContent = '⚠️ Już dodano: ' + record.batch;
+      resultEl.className = 'scanner-result notfound';
+      vibrate([100,50,100]);
+    } else {
+      scanned.unshift({
+        seq: scanned.length + 1,
+        ...record,
+        scannedAt: new Date().toLocaleTimeString('pl-PL', {hour:'2-digit', minute:'2-digit'})
+      });
+      resultEl.textContent = '✅ ' + record.batch + '  ·  ' + record.item + '  ·  ' + record.qty + ' ' + record.unit;
+      resultEl.className = 'scanner-result found';
+      render();
+      vibrate([80]);
+    }
+  } else {
+    resultEl.textContent = '❌ Nie znaleziono: ' + batchCandidate;
+    resultEl.className = 'scanner-result notfound';
+    vibrate([200]);
+  }
+}
+
+function vibrate(pattern) {
+  if (navigator.vibrate) navigator.vibrate(pattern);
+}
+
+// ── MANUAL ADD ───────────────────────────────────────────
+function addBatch() {
+  const input = document.getElementById('batchInput');
+  const raw = input.value.trim();
+  if (!raw) return;
+  const key = normalize(raw);
+  const record = LOOKUP[key];
+  if (!record) { showFeedback('err', '❌ Nie znaleziono: "' + raw + '"'); return; }
+  const dup = scanned.find(s => normalize(s.batch) === key);
+  if (dup) { showFeedback('err', '⚠️ "' + record.batch + '" już jest na liście'); return; }
+  scanned.unshift({ seq: scanned.length+1, ...record, scannedAt: new Date().toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'}) });
+  input.value = '';
+  showFeedback('ok', '✅ ' + record.batch + ' · ' + record.item + ' · ' + record.qty + ' ' + record.unit);
+  render();
+  input.focus();
+}
+
+function removeEntry(idx) { scanned.splice(idx,1); render(); }
+
+function clearAll() {
+  if (!scanned.length) return;
+  if (confirm('Usunąć wszystkie ' + scanned.length + ' pozycji?')) { scanned=[]; render(); }
+}
+
+function showFeedback(type, msg) {
+  const el = document.getElementById('feedback');
+  el.className = type; el.textContent = msg;
+  clearTimeout(el._t);
+  el._t = setTimeout(()=>{ el.style.display='none'; el.className=''; }, 4000);
+}
+
+function getBadge(s) {
+  if (s==='PASS')     return 'badge-PASS';
+  if (s==='UNTESTED') return 'badge-UNTESTED';
+  if (s==='CONC')     return 'badge-CONC';
+  return 'badge-NA';
+}
+
+function render() {
+  document.getElementById('countNum').textContent = scanned.length;
+  document.getElementById('exportBtn').disabled = scanned.length === 0;
+  const container = document.getElementById('scannedList');
+  if (!scanned.length) {
+    container.innerHTML = '<div class="empty-state"><span class="big">📦</span>Naciśnij 📷 aby zeskanować QR<br>lub wklej batch number ręcznie</div>';
+    return;
+  }
+  container.innerHTML = scanned.map((e,i) => `
+    <div class="s-card status-${e.status}">
+      <div class="s-main">
+        <div class="s-item">${e.item}</div>
+        <div class="s-batch">${e.batch}</div>
+        <div class="s-meta">
+          <span class="s-loc">📍 ${e.location}</span>
+          <span class="s-qty">${e.qty} ${e.unit}</span>
+        </div>
+        <div class="seq-num">#${scanned.length-i} · ${e.scannedAt}</div>
+      </div>
+      <div class="s-right">
+        <span class="s-badge ${getBadge(e.status)}">${e.status}</span>
+        <button class="del-btn" onclick="removeEntry(${i})">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function exportExcel() {
+  if (!scanned.length) return;
+  const today = new Date().toLocaleDateString('pl-PL').replace(/\./g,'_');
+  const rows = scanned.map((e,i) => ({
+    'Lp.': scanned.length-i, 'Batch Number': e.batch, 'Item': e.item,
+    'Ilość': e.qty, 'Jednostka': e.unit, 'Status': e.status,
+    'Lokalizacja': e.location, 'Godzina skanu': e.scannedAt
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:5},{wch:22},{wch:28},{wch:10},{wch:10},{wch:12},{wch:14},{wch:14}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Skany ' + today);
+  XLSX.writeFile(wb, 'palety_' + today + '.xlsx');
+}
+
+document.getElementById('dateNow').textContent = new Date().toLocaleDateString('pl-PL',{day:'2-digit',month:'2-digit',year:'numeric'});
+document.getElementById('batchInput').addEventListener('keydown', e => { if (e.key==='Enter') addBatch(); });
+</script>
+</body>
+</html>
