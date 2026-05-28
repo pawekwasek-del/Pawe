@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Skaner Palet</title>
+<style>
+  :root {
+    --bg: #0d0f14; --surface: #161a23; --card: #1d2230; --border: #2a3147;
+    --accent: #00e5ff; --pass: #00e676; --untested: #ffb300; --conc: #ff5252;
+    --text: #e8eaf0; --muted: #6b7a99;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: "JetBrains Mono", "Courier New", monospace; min-height: 100vh; padding-bottom: 80px; }
+
+  header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; }
+  .h1 { font-size: 1rem; font-weight: 800; color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; }
+  .h1-sub { font-size: 0.58rem; color: var(--muted); margin-top: 2px; }
+
+  .db-bar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 8px 12px; font-size: 0.62rem; display: flex; align-items: center; gap: 8px; }
+  .db-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: background 0.3s; }
+  .db-dot.loaded { background: var(--pass); box-shadow: 0 0 6px var(--pass); }
+
+  .upload-btn { background: var(--card); border: 1px solid var(--accent); color: var(--accent); padding: 5px 10px; border-radius: 5px; font-size: 0.6rem; font-weight: 700; cursor: pointer; text-transform: uppercase; white-space: nowrap; }
+
+  .upload-panel { margin: 12px; background: var(--surface); border: 2px dashed var(--border); border-radius: 12px; padding: 28px 16px; text-align: center; }
+  .upload-panel .icon { font-size: 2.5rem; display: block; margin-bottom: 10px; }
+  .upload-panel h2 { font-size: 0.9rem; font-weight: 700; margin-bottom: 6px; }
+  .upload-panel p { font-size: 0.62rem; color: var(--muted); margin-bottom: 18px; line-height: 1.7; }
+  .upload-file-btn { background: var(--accent); color: #000; padding: 11px 24px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; cursor: pointer; text-transform: uppercase; display: inline-block; }
+  .col-hint { margin-top: 14px; font-size: 0.58rem; color: var(--muted); line-height: 1.8; text-align: left; background: var(--card); border-radius: 6px; padding: 10px 12px; }
+  .col-hint b { color: var(--accent); }
+
+  .feedback { margin: 8px 12px; padding: 8px 12px; border-radius: 6px; font-size: 0.68rem; display: none; }
+  .feedback.ok  { display: block; background: rgba(0,230,118,0.12); color: var(--pass); border: 1px solid rgba(0,230,118,0.3); }
+  .feedback.err { display: block; background: rgba(255,82,82,0.12); color: var(--conc); border: 1px solid rgba(255,82,82,0.3); }
+
+  .scan-box { margin: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .scan-label { font-size: 0.62rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 8px; }
+  .scan-row { display: flex; gap: 8px; }
+  #batchInput { flex: 1; background: var(--card); border: 2px solid var(--accent); color: var(--text); padding: 10px 14px; border-radius: 8px; font-family: inherit; font-size: 0.85rem; font-weight: 600; outline: none; }
+  #batchInput::placeholder { color: var(--muted); font-weight: 400; }
+
+  .qr-btn { background: var(--surface); border: 2px solid var(--accent); color: var(--accent); width: 46px; height: 46px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 1.3rem; }
+  .qr-btn:active { background: rgba(0,229,255,0.15); }
+  .add-btn { background: var(--accent); color: #000; border: none; padding: 10px 14px; border-radius: 8px; font-family: inherit; font-size: 0.75rem; font-weight: 700; cursor: pointer; text-transform: uppercase; white-space: nowrap; }
+  .add-btn:active { opacity: 0.8; }
+
+  .counter-bar { display: flex; justify-content: space-between; margin: 0 12px 8px; font-size: 0.62rem; color: var(--muted); }
+  .count-num { color: var(--accent); font-size: 0.85rem; font-weight: 700; }
+
+  .scanned-list { margin: 0 12px; display: flex; flex-direction: column; gap: 6px; }
+  .s-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .s-card.PASS     { border-left: 3px solid var(--pass); }
+  .s-card.UNTESTED { border-left: 3px solid var(--untested); }
+  .s-card.CONC     { border-left: 3px solid var(--conc); }
+  .s-main { flex: 1; min-width: 0; }
+  .s-item  { font-size: 0.65rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .s-batch { font-size: 0.6rem; color: var(--accent); margin-top: 2px; }
+  .s-meta  { display: flex; gap: 8px; margin-top: 4px; font-size: 0.6rem; align-items: center; }
+  .s-loc   { background: rgba(255,255,255,0.05); border: 1px solid var(--border); padding: 1px 6px; border-radius: 3px; color: var(--muted); }
+  .s-qty   { font-weight: 600; }
+  .s-seq   { font-size: 0.55rem; color: var(--muted); margin-top: 2px; }
+  .s-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .badge   { font-size: 0.55rem; font-weight: 700; padding: 2px 7px; border-radius: 4px; text-transform: uppercase; white-space: nowrap; }
+  .badge.PASS     { background: rgba(0,230,118,0.15); color: var(--pass);     border: 1px solid rgba(0,230,118,0.3); }
+  .badge.UNTESTED { background: rgba(255,179,0,0.15);  color: var(--untested); border: 1px solid rgba(255,179,0,0.3); }
+  .badge.CONC     { background: rgba(255,82,82,0.15);  color: var(--conc);     border: 1px solid rgba(255,82,82,0.3); }
+  .badge.NA       { background: rgba(107,122,153,0.15);color: var(--muted);    border: 1px solid var(--border); }
+  .del-btn { background: none; border: 1px solid var(--border); color: var(--muted); width: 24px; height: 24px; border-radius: 4px; cursor: pointer; font-size: 0.75rem; }
+  .del-btn:active { border-color: var(--conc); color: var(--conc); }
+  .empty-state { text-align: center; padding: 30px 16px; color: var(--muted); font-size: 0.7rem; line-height: 1.8; }
+  .empty-icon { font-size: 2.2rem; display: block; margin-bottom: 8px; }
+
+  .export-bar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 2px solid var(--border); padding: 10px 12px; display: flex; gap: 8px; }
+  .clear-btn  { background: var(--card); border: 1px solid var(--border); color: var(--muted); padding: 12px 14px; border-radius: 8px; font-family: inherit; font-size: 0.7rem; cursor: pointer; text-transform: uppercase; }
+  .export-btn { flex: 1; border: none; padding: 12px; border-radius: 8px; font-family: inherit; font-size: 0.75rem; font-weight: 700; cursor: pointer; text-transform: uppercase; }
+  .export-btn:disabled { background: var(--card); color: var(--muted); cursor: not-allowed; }
+  .export-btn:not(:disabled) { background: var(--pass); color: #000; }
+
+  /* SCANNER OVERLAY */
+  .scanner-overlay { display: none; position: fixed; inset: 0; background: #000; z-index: 1000; flex-direction: column; }
+  .scanner-overlay.open { display: flex; }
+  .scanner-hdr { background: rgba(0,0,0,0.9); padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; }
+  .scanner-hdr span { font-size: 0.9rem; font-weight: 800; color: var(--accent); text-transform: uppercase; }
+  .close-btn { background: none; border: 1px solid #444; color: #aaa; padding: 6px 14px; border-radius: 6px; font-family: inherit; font-size: 0.7rem; cursor: pointer; text-transform: uppercase; }
+  .video-wrap { flex: 1; position: relative; overflow: hidden; }
+  #videoEl { width: 100%; height: 100%; object-fit: cover; }
+  .scan-frame { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 240px; height: 240px; border: 2px solid var(--accent); border-radius: 12px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.55); pointer-events: none; }
+  .scan-hint { position: absolute; bottom: 90px; left: 0; right: 0; text-align: center; color: #ccc; font-size: 0.7rem; pointer-events: none; }
+  .scan-result { background: rgba(0,0,0,0.9); padding: 14px 16px; border-top: 1px solid #333; font-size: 0.72rem; min-height: 52px; display: flex; align-items: center; }
+  .scan-result.ok  { color: var(--pass); }
+  .scan-result.err { color: var(--conc); }
+  .scan-result.def { color: var(--muted); }
+
+  #canvas { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="h1">📱 Skaner Palet</div>
+    <div class="h1-sub">Wgraj xlsx → skanuj QR → eksportuj</div>
+  </div>
+  <label class="upload-btn">↑ Wgraj xlsx<input type="file" accept=".xlsx,.xls" onchange="handleFile(this)" style="display:none"></label>
+</header>
+
+<div class="db-bar">
+  <div class="db-dot" id="dbDot"></div>
+  <span id="dbText" style="color:var(--muted)">Brak danych – wgraj plik xlsx</span>
+</div>
+
+<div id="feedback" class="feedback"></div>
+
+<div class="upload-panel" id="uploadPanel">
+  <span class="icon">📂</span>
+  <h2>Wgraj Stan Magazynowy</h2>
+  <p>Wgraj codzienny eksport xlsx.<br>Aplikacja automatycznie rozpozna kolumny.</p>
+  <label class="upload-file-btn">Wybierz plik xlsx<input type="file" accept=".xlsx,.xls" onchange="handleFile(this)" style="display:none"></label>
+  <div class="col-hint">
+    <b>Wymagane kolumny:</b><br>
+    • <b>Batch number</b> – numer batcha<br>
+    • <b>Item number</b> – kod produktu<br>
+    • <b>Location</b> – lokalizacja<br>
+    • <b>Batch disposition code</b> – status<br>
+    • <b>Physical stock</b> – ilość
+  </div>
+</div>
+
+<div id="scanSection" style="display:none">
+  <div class="scan-box">
+    <span class="scan-label">🔍 Batch Number</span>
+    <div class="scan-row">
+      <input type="text" id="batchInput" placeholder="Wklej lub zeskanuj QR…" autocomplete="off" autocorrect="off" spellcheck="false">
+      <button class="qr-btn" onclick="openScanner()" title="Skanuj QR kamerą">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>
+          <rect x="14" y="14" width="3" height="3"/><rect x="18" y="14" width="3" height="3"/><rect x="14" y="18" width="3" height="3"/><rect x="18" y="18" width="3" height="3"/>
+        </svg>
+      </button>
+      <button class="add-btn" onclick="addManual()">+ Dodaj</button>
+    </div>
+  </div>
+
+  <div class="counter-bar">
+    <span>Zeskanowane: <span class="count-num" id="countNum">0</span></span>
+    <span id="dateNow"></span>
+  </div>
+
+  <div class="scanned-list" id="scannedList">
+    <div class="empty-state"><span class="empty-icon">📦</span>Naciśnij 📷 aby zeskanować QR<br>lub wklej batch number ręcznie</div>
+  </div>
+</div>
+
+<!-- QR SCANNER -->
+<div class="scanner-overlay" id="scannerOverlay">
+  <div class="scanner-hdr">
+    <span>📷 Skanuj QR</span>
+    <button class="close-btn" onclick="closeScanner()">✕ Zamknij</button>
+  </div>
+  <div class="video-wrap">
+    <video id="videoEl" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+    <div class="scan-frame"></div>
+    <div class="scan-hint">Nakieruj na kod QR z etykiety Zotefoams</div>
+  </div>
+  <div class="scan-result def" id="scanResult">Czekam na kod QR…</div>
+</div>
+
+<div class="export-bar">
+  <button class="clear-btn" onclick="clearAll()">🗑 Wyczyść</button>
+  <button class="export-btn" id="exportBtn" onclick="exportExcel()" disabled>⬇ Eksport Excel</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+// ── ZXing via CDN ─────────────────────────────────────────
+const ZXING_CDN = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js';
+let zxingReader = null;
+let zxingReady  = false;
+
+function loadZXing() {
+  return new Promise((resolve) => {
+    if (window.ZXing) { initZXing(); resolve(); return; }
+    const s = document.createElement('script');
+    s.src = ZXING_CDN;
+    s.onload = () => { initZXing(); resolve(); };
+    s.onerror = () => { console.warn('ZXing CDN failed'); resolve(); };
+    document.head.appendChild(s);
+  });
+}
+
+function initZXing() {
+  try {
+    const hints = new Map();
+    hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
+    hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, [window.ZXing.BarcodeFormat.QR_CODE]);
+    zxingReader = new window.ZXing.BrowserMultiFormatReader(hints);
+    zxingReady = true;
+  } catch(e) { console.warn('ZXing init error', e); }
+}
+
+loadZXing();
+// Also preload jsQR as backup
+(function(){
+  const s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
+  document.head.appendChild(s);
+})();
+
+// ── COLUMN ALIASES ────────────────────────────────────────
+const ALIASES = {
+  batch:    ['batch number','batch no','batchnumber','batch_number','batch nr','nr batcha','numer batcha','lot number','lot no'],
+  item:     ['item number','item no','itemnumber','item_number','item','article number','product id'],
+  location: ['location','lokalizacja','loc','bin'],
+  status:   ['batch disposition code','batch disposition code2','disposition code','status','batch status'],
+  qty:      ['physical stock','physical stock2','qty','quantity','ilość','ilosc','stock'],
+  unit:     ['stock unit','unit','jednostka','uom']
+};
+
+function findCol(headers, field) {
+  for (const h of headers)
+    if (ALIASES[field].includes(h.toLowerCase().trim())) return h;
+  return null;
+}
+
+function norm(s) {
+  return String(s||'').trim().toLowerCase().replace(/\s+/g,'').replace(/[–—]/g,'-');
+}
+
+// ── STATE ─────────────────────────────────────────────────
+let LOOKUP  = {};
+let dbInfo  = null;
+let scanned = [];
+let stream  = null;
+let rafId   = null;
+let lastQR  = { val:'', time:0 };
+let fbTimer = null;
+
+// ── FILE UPLOAD ───────────────────────────────────────────
+function handleFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb   = XLSX.read(e.target.result, {type:'array'});
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      if (!rows.length) { showFb('err','❌ Plik jest pusty'); return; }
+      const hdrs = Object.keys(rows[0]);
+      const bCol = findCol(hdrs,'batch');
+      const iCol = findCol(hdrs,'item');
+      if (!bCol) { showFb('err','❌ Brak kolumny "Batch number"'); return; }
+      if (!iCol) { showFb('err','❌ Brak kolumny "Item number"');  return; }
+      const lkp = {};
+      rows.forEach(r => {
+        const bv = String(r[bCol]||'').trim();
+        if (!bv) return;
+        lkp[norm(bv)] = {
+          batch:    bv,
+          item:     String(r[iCol]||'').trim(),
+          location: findCol(hdrs,'location') ? String(r[findCol(hdrs,'location')]||'').trim() : '—',
+          status:   findCol(hdrs,'status')   ? String(r[findCol(hdrs,'status')]  ||'').trim() : '—',
+          qty:      findCol(hdrs,'qty')      ? parseFloat(r[findCol(hdrs,'qty')]) ||0 : 0,
+          unit:     findCol(hdrs,'unit')     ? String(r[findCol(hdrs,'unit')]     ||'').trim() : ''
+        };
+      });
+      LOOKUP = lkp;
+      dbInfo = { count: Object.keys(lkp).length, name: file.name };
+      document.getElementById('dbDot').className  = 'db-dot loaded';
+      document.getElementById('dbText').textContent = '✅ ' + dbInfo.count + ' pozycji · ' + file.name;
+      document.getElementById('dbText').style.color = 'var(--text)';
+      document.getElementById('uploadPanel').style.display  = 'none';
+      document.getElementById('scanSection').style.display  = 'block';
+      showFb('ok','✅ Wczytano ' + dbInfo.count + ' pozycji');
+    } catch(err) { showFb('err','❌ Błąd: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+  input.value = '';
+}
+
+// ── FEEDBACK ──────────────────────────────────────────────
+function showFb(type, msg) {
+  const el = document.getElementById('feedback');
+  el.className = 'feedback ' + type;
+  el.textContent = msg;
+  clearTimeout(fbTimer);
+  fbTimer = setTimeout(() => { el.style.display='none'; el.className='feedback'; }, 4000);
+}
+
+// ── SCANNER ───────────────────────────────────────────────
+async function openScanner() {
+  document.getElementById('scannerOverlay').classList.add('open');
+  setResult('def','Uruchamianie kamery…');
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode:'environment', width:{ideal:1920}, height:{ideal:1080} }
+    });
+    const video = document.getElementById('videoEl');
+    video.srcObject = stream;
+    await video.play();
+
+    if (zxingReady && zxingReader) {
+      // Use ZXing continuous decode
+      startZXing(video);
+    } else {
+      // Fallback: jsQR via canvas
+      loadJsQR().then(() => startJsQR(video));
+    }
+    setResult('def','Nakieruj na kod QR z etykiety…');
+  } catch(err) {
+    setResult('err','❌ Brak dostępu do kamery: ' + err.message);
+  }
+}
+
+function startZXing(video) {
+  zxingReader.decodeFromStream(stream, video, (result, err) => {
+    if (result) {
+      const raw = result.getText();
+      const now = Date.now();
+      if (raw !== lastQR.val || now - lastQR.time > 3000) {
+        lastQR = { val: raw, time: now };
+        handleQR(raw);
+      }
+    }
+  });
+}
+
+// jsQR fallback
+let jsqrReady = false;
+function loadJsQR() {
+  return new Promise(resolve => {
+    if (window.jsQR) { jsqrReady=true; resolve(); return; }
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js';
+    s.onload = () => { jsqrReady=true; resolve(); };
+    document.head.appendChild(s);
+  });
+}
+
+function startJsQR(video) {
+  const canvas = document.getElementById('canvas');
+  function tick() {
+    if (!document.getElementById('scannerOverlay').classList.contains('open')) return;
+    if (video.readyState >= 2) {
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0);
+      const img  = ctx.getImageData(0,0,canvas.width,canvas.height);
+      const code = window.jsQR && window.jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'});
+      if (code?.data) {
+        const now = Date.now();
+        if (code.data !== lastQR.val || now - lastQR.time > 3000) {
+          lastQR = { val: code.data, time: now };
+          handleQR(code.data);
+        }
+      }
+    }
+    rafId = requestAnimationFrame(tick);
+  }
+  tick();
+}
+
+function closeScanner() {
+  document.getElementById('scannerOverlay').classList.remove('open');
+  if (zxingReady && zxingReader) { try { zxingReader.reset(); } catch(e){} }
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  if (stream) { stream.getTracks().forEach(t=>t.stop()); stream = null; }
+}
+
+function setResult(cls, msg) {
+  const el = document.getElementById('scanResult');
+  el.className = 'scan-result ' + cls;
+  el.textContent = msg;
+}
+
+function handleQR(raw) {
+  let batch = raw;
+  if (raw.includes('BATCH:')) { const m=raw.match(/BATCH:([^|\n]+)/i); if(m) batch=m[1].trim(); }
+  else if (raw.match(/batch[^:]*:/i)) { const m=raw.match(/batch[^:]*:\s*([^\n,;|]+)/i); if(m) batch=m[1].trim(); }
+
+  const key = norm(batch);
+  const rec = LOOKUP[key];
+
+  if (rec) {
+    const dup = scanned.find(s => norm(s.batch) === key);
+    if (dup) {
+      setResult('err','⚠️ Już dodano: ' + rec.batch);
+      if (navigator.vibrate) navigator.vibrate([100,50,100]);
+    } else {
+      scanned.unshift({ ...rec, scannedAt: new Date().toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'}) });
+      setResult('ok','✅ ' + rec.batch + '  ·  ' + rec.qty + ' ' + rec.unit);
+      if (navigator.vibrate) navigator.vibrate([80]);
+      render();
+    }
+  } else {
+    setResult('err','❌ Nie znaleziono: ' + batch);
+    if (navigator.vibrate) navigator.vibrate([200]);
+  }
+}
+
+// ── MANUAL ADD ────────────────────────────────────────────
+function addManual() {
+  const raw = document.getElementById('batchInput').value.trim();
+  if (!raw) return;
+  const key = norm(raw);
+  const rec = LOOKUP[key];
+  if (!rec) { showFb('err','❌ Nie znaleziono: "' + raw + '"'); return; }
+  if (scanned.find(s => norm(s.batch) === key)) { showFb('err','⚠️ "' + rec.batch + '" już jest na liście'); return; }
+  scanned.unshift({ ...rec, scannedAt: new Date().toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'}) });
+  document.getElementById('batchInput').value = '';
+  showFb('ok','✅ ' + rec.batch + ' · ' + rec.qty + ' ' + rec.unit);
+  render();
+}
+
+function clearAll() {
+  if (!scanned.length) return;
+  if (confirm('Usunąć wszystkie ' + scanned.length + ' pozycji?')) { scanned=[]; render(); }
+}
+
+function getBadge(s) {
+  if (s==='PASS')     return 'PASS';
+  if (s==='UNTESTED') return 'UNTESTED';
+  if (s==='CONC')     return 'CONC';
+  return 'NA';
+}
+
+function render() {
+  document.getElementById('countNum').textContent  = scanned.length;
+  document.getElementById('exportBtn').disabled    = scanned.length === 0;
+  const c = document.getElementById('scannedList');
+  if (!scanned.length) {
+    c.innerHTML = '<div class="empty-state"><span class="empty-icon">📦</span>Naciśnij 📷 aby zeskanować QR<br>lub wklej batch number ręcznie</div>';
+    return;
+  }
+  c.innerHTML = scanned.map((e,i) => {
+    const b = getBadge(e.status);
+    return '<div class="s-card ' + e.status + '">' +
+      '<div class="s-main">' +
+        '<div class="s-item">' + e.item + '</div>' +
+        '<div class="s-batch">' + e.batch + '</div>' +
+        '<div class="s-meta"><span class="s-loc">📍 ' + e.location + '</span><span class="s-qty">' + e.qty + ' ' + e.unit + '</span></div>' +
+        '<div class="s-seq">#' + (scanned.length-i) + ' · ' + e.scannedAt + '</div>' +
+      '</div>' +
+      '<div class="s-right">' +
+        '<span class="badge ' + b + '">' + e.status + '</span>' +
+        '<button class="del-btn" onclick="scanned.splice(' + i + ',1);render()">✕</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function exportExcel() {
+  if (!scanned.length) return;
+  const today = new Date().toLocaleDateString('pl-PL').replace(/\./g,'_');
+  const rows  = scanned.map((e,i) => ({
+    'Lp.': scanned.length-i, 'Batch Number': e.batch, 'Item': e.item,
+    'Ilość': e.qty, 'Jednostka': e.unit, 'Status': e.status,
+    'Lokalizacja': e.location, 'Godzina skanu': e.scannedAt
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:5},{wch:22},{wch:28},{wch:10},{wch:10},{wch:12},{wch:14},{wch:14}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Skany ' + today);
+  XLSX.writeFile(wb, 'palety_' + today + '.xlsx');
+}
+
+document.getElementById('dateNow').textContent = new Date().toLocaleDateString('pl-PL',{day:'2-digit',month:'2-digit',year:'numeric'});
+document.getElementById('batchInput').addEventListener('keydown', e => { if(e.key==='Enter') addManual(); });
+</script>
+</body>
+</html>
